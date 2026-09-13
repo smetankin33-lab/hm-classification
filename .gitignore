@@ -1,0 +1,13 @@
+# Python и IDE
+__pycache__/
+*.pyc
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Данные (слишком тяжелые для Git)
+data/
+
+# Исключаем тяжелые файлы нейросети (мы используем только LogisticRegression)
+models/lstm_model.pth

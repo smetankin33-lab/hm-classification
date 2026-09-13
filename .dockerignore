@@ -1,0 +1,24 @@
+# Игнорируем виртуальное окружение и кэш Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Игнорируем настройки IDE и Git
+.git/
+.gitignore
+.idea/
+.vscode/
+*.md
+
+# Игнорируем файлы, не нужные для продакшена
+notebooks/
+tests/
+data/
+
+# Игнорируем файлы нейросети (мы используем только LogisticRegression для API)
+models/lstm_model.pth
+models/vocab.pickle
+models/classes.json
+models/model_config.json
