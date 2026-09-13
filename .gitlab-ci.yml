@@ -1,23 +1,12 @@
-# =====================================================
-# GitLab CI/CD: test -> build -> deploy
-# =====================================================
-
 stages:
   - test
   - build
   - deploy
 
 variables:
-  # Отключаем TLS для docker-in-docker (ускоряет сборку в CI)
   DOCKER_TLS_CERTDIR: ""
-  # Имя образа с тегом по SHA коммита (требование ТЗ)
   IMAGE_NAME: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
-# -----------------------------------------------------
-# ЭТАП 1: TEST — запуск pytest.
-# Если тесты упадут, пайплайн остановится,
-# и build/deploy не запустятся.
-# -----------------------------------------------------
 test:
   stage: test
   image: python:3.11-slim
@@ -26,11 +15,6 @@ test:
   script:
     - pytest tests/
 
-# -----------------------------------------------------
-# ЭТАП 2: BUILD — сборка Docker-образа и пуш в GitLab Container Registry.
-# Тег образа = SHA коммита. Секреты логина в Registry
-# (CI_REGISTRY_USER / CI_REGISTRY_PASSWORD) GitLab подставляет сам.
-# -----------------------------------------------------
 build:
   stage: build
   image: docker:24.0
@@ -42,11 +26,6 @@ build:
     - docker build -t "$IMAGE_NAME" .
     - docker push "$IMAGE_NAME"
 
-# -----------------------------------------------------
-# ЭТАП 3: DEPLOY — запуск ВРУЧНУЮ (кнопка Play), только для ветки main.
-# Ansible подключается к серверу по SSH (ключ из CI/CD Variables),
-# устанавливает Docker, скачивает образ и запускает контейнер.
-# -----------------------------------------------------
 deploy:
   stage: deploy
   image: alpine:latest
@@ -61,12 +40,7 @@ deploy:
     - ssh-keyscan -H "$DEPLOY_SERVER" >> ~/.ssh/known_hosts
   script:
     - cd ansible
-    - >-
-      ansible-playbook -i inventory.ini playbook.yml
-      -e "image_name=$IMAGE_NAME"
-      -e "registry_url=$CI_REGISTRY"
-      -e "registry_user=$CI_REGISTRY_USER"
-      -e "registry_password=$CI_REGISTRY_PASSWORD"
+    - ansible-playbook -i inventory.ini playbook.yml -e "image_name=$IMAGE_NAME" -e "registry_url=$CI_REGISTRY" -e "registry_user=$CI_REGISTRY_USER" -e "registry_password=$CI_REGISTRY_PASSWORD"
   environment:
     name: production
   when: manual
