@@ -1,0 +1,38 @@
+- name: Deploy H&M Classification Service
+  hosts: app_servers
+  become: yes
+
+  tasks:
+    - name: Install Docker and Python dependencies
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+          - python3-docker
+        state: present
+        update_cache: yes
+
+    - name: Log in to GitLab Container Registry
+      community.docker.docker_login:
+        registry_url: "{{ registry_url }}"
+        username: "{{ registry_user }}"
+        password: "{{ registry_password }}"
+
+    - name: Stop and remove old container (if exists)
+      community.docker.docker_container:
+        name: hm-app
+        state: absent
+
+    - name: Pull Docker image
+      community.docker.docker_image:
+        name: "{{ image_name }}"
+        source: pull
+
+    - name: Run new container (host port 80 -> container port 8000)
+      community.docker.docker_container:
+        name: hm-app
+        image: "{{ image_name }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "80:8000"

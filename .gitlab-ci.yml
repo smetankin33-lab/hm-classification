@@ -1,0 +1,74 @@
+# =====================================================
+# GitLab CI/CD: test -> build -> deploy
+# =====================================================
+
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  # Отключаем TLS для docker-in-docker (ускоряет сборку в CI)
+  DOCKER_TLS_CERTDIR: ""
+  # Имя образа с тегом по SHA коммита (требование ТЗ)
+  IMAGE_NAME: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+
+# -----------------------------------------------------
+# ЭТАП 1: TEST — запуск pytest.
+# Если тесты упадут, пайплайн остановится,
+# и build/deploy не запустятся.
+# -----------------------------------------------------
+test:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install --no-cache-dir -r requirements.txt
+  script:
+    - pytest tests/
+
+# -----------------------------------------------------
+# ЭТАП 2: BUILD — сборка Docker-образа и пуш в GitLab Container Registry.
+# Тег образа = SHA коммита. Секреты логина в Registry
+# (CI_REGISTRY_USER / CI_REGISTRY_PASSWORD) GitLab подставляет сам.
+# -----------------------------------------------------
+build:
+  stage: build
+  image: docker:24.0
+  services:
+    - docker:24.0-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -t "$IMAGE_NAME" .
+    - docker push "$IMAGE_NAME"
+
+# -----------------------------------------------------
+# ЭТАП 3: DEPLOY — запуск ВРУЧНУЮ (кнопка Play), только для ветки main.
+# Ansible подключается к серверу по SSH (ключ из CI/CD Variables),
+# устанавливает Docker, скачивает образ и запускает контейнер.
+# -----------------------------------------------------
+deploy:
+  stage: deploy
+  image: alpine:latest
+  variables:
+    ANSIBLE_HOST_KEY_CHECKING: "False"
+  before_script:
+    - apk add --no-cache ansible openssh-client
+    - ansible-galaxy collection install community.docker
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H "$DEPLOY_SERVER" >> ~/.ssh/known_hosts
+  script:
+    - cd ansible
+    - >-
+      ansible-playbook -i inventory.ini playbook.yml
+      -e "image_name=$IMAGE_NAME"
+      -e "registry_url=$CI_REGISTRY"
+      -e "registry_user=$CI_REGISTRY_USER"
+      -e "registry_password=$CI_REGISTRY_PASSWORD"
+  environment:
+    name: production
+  when: manual
+  only:
+    - main
